@@ -20,7 +20,7 @@ dll: envpath.c envpath.h
 		cl $(clflags) $(commonflags) -LD -DDLL_BUILD envpath.c
 
 psmod_build: Main.cs
-	dotnet build $(dotnetflags)
+	dotnet build $(dotnetflags) | findstr /v "Time Elapsed"
 
 psmod: psmod_build BinEnvPath.psd1 dll
 	if not exist psmod mkdir psmod && \
@@ -29,4 +29,4 @@ psmod: psmod_build BinEnvPath.psd1 dll
 		copy dll\envpath.dll psmod
 
 clean:
-	del vc140.pdb & rd /s /q obj psmod psmod_build dll cli & cd .
+	del vc140.pdb & rd /s /q bin obj psmod psmod_build dll cli & cd .

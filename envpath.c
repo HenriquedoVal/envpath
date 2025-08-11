@@ -502,6 +502,12 @@ static char *get_sanitized_envpath(bool diagnose, bool verbose)
 
     DynArr final = sanitize(&sys_da, &usr_da, &inh_da, diagnose);
     char *envpath = da_to_envvar(&final, diagnose, "Sanitized final path:");
+    
+    // Remove last '\n' written above
+    if (outputs[ENV_STDERR] != stderr) {
+        fseek(outputs[ENV_STDERR], -1, SEEK_CUR);
+        fwrite("", 1, 1, outputs[ENV_STDERR]);
+    }
 
     dynarr_free(&final);
     dynarr_free(&sys_da);
