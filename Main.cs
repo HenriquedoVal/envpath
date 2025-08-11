@@ -63,23 +63,6 @@ namespace BinEnvPath
 
     public class Main : PSCmdlet
     {
-        [DllImport("kernel32.dll",
-                   CharSet = CharSet.Unicode,
-                   SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        public static extern bool SetEnvironmentVariableW(string name,
-                                                          string value);
-
-        // Runtime's env != process' env
-        bool CommitEnvironmentPath()
-        {
-            const string Path = "Path";
-            string p = Environment.GetEnvironmentVariable(Path);
-            if (p is null) return false;
-
-            return SetEnvironmentVariableW(Path, p);
-        }
-
         public void Error(string msg)
         {
             WriteError(new ErrorRecord(
@@ -91,20 +74,10 @@ namespace BinEnvPath
 
         public bool Prolog()
         {
-            bool ret = CommitEnvironmentPath();
-            if (!ret) {
-                Error("Could not \"commit\" runtime's " +
-                      "Path environment variable");
-                return false;
-            }
-
-            ret = EnvPath.set_tmp_outputs();
-            if (!ret) {
+            bool ret = EnvPath.set_tmp_outputs();
+            if (!ret)
                 Error("Could not set output buffers");
-                return false;
-            }
-
-            return true;
+            return ret;
         }
 
         public void Epilog()
