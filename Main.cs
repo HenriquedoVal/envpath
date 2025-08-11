@@ -2,9 +2,9 @@
 using System.Management.Automation;
 using System.Runtime.InteropServices;
 
-namespace envpath
+namespace BinEnvPath
 {
-    public static class Envpath
+    public static class EnvPath
     {
         public enum Target : int {
             User,
@@ -61,87 +61,117 @@ namespace envpath
                 [MarshalAs(UnmanagedType.I1)] bool exact);
     }
 
-    public class Mid : PSCmdlet
+    public class Main : PSCmdlet
     {
+        [DllImport("kernel32.dll",
+                   CharSet = CharSet.Unicode,
+                   SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool SetEnvironmentVariableW(string name,
+                                                          string value);
+
+        // Runtime's env != process' env
+        bool CommitEnvironmentPath()
+        {
+            const string Path = "Path";
+            string p = Environment.GetEnvironmentVariable(Path);
+            if (p is null) return false;
+
+            return SetEnvironmentVariableW(Path, p);
+        }
+
         public void Error(string msg)
         {
             WriteError(new ErrorRecord(
                         new ApplicationException(msg),
                         msg,
                         ErrorCategory.InvalidResult,
-                        null
-            ));
+                        null));
         }
-    }
 
-    [Cmdlet(VerbsData.Update, "EnvPath")]
-    [OutputType(typeof(void))]
-    public class UpdateEnvPath : Mid
-    {
-        protected override void BeginProcessing()
+        public bool Prolog()
         {
-            bool ret = Envpath.set_tmp_outputs();
+            bool ret = CommitEnvironmentPath();
             if (!ret) {
-                Error("Could not set output buffers");
-                return;
+                Error("Could not \"commit\" runtime's " +
+                      "Path environment variable");
+                return false;
             }
 
-            ret = Envpath.update();
-            if (!ret) Error("Call to `update` failed");
+            ret = EnvPath.set_tmp_outputs();
+            if (!ret) {
+                Error("Could not set output buffers");
+                return false;
+            }
 
-            ret = Envpath.reset_tmp_outputs();
-            if (!ret) Error("Could not reset output buffers");
+            return true;
+        }
+
+        public void Epilog()
+        {
+            if (!EnvPath.reset_tmp_outputs())
+                Error("Could not reset output buffers");
         }
     }
 
-    public class Output
+    public class TestOutput
     {
         public string Info { get; set; }
         public string Path { get; set; }
     }
 
     [Cmdlet(VerbsDiagnostic.Test, "EnvPath")]
-    [OutputType(typeof(Output))]
-    public class TestEnvPath : Mid
+    [OutputType(typeof(TestOutput))]
+    public class TestEnvPath : Main
     {
         protected override void BeginProcessing()
         {
+            if (!Prolog()) return;
+
             bool verbose = this.MyInvocation.BoundParameters.ContainsKey(
                     "Verbose");
 
-            bool ret = Envpath.set_tmp_outputs();
-            if (!ret) {
-                Error("Could not set output buffers");
-                return;
-            }
-
-            ret = Envpath.diagnose(verbose);
+            bool ret = EnvPath.diagnose(verbose);
             if (!ret) {
                 Error($"Call to `diagnose({verbose})` failed");
 
             } else {
-                string info = Envpath.get_stderr();
+                string info = EnvPath.get_stderr();
                 if (info is null) Error("Could not get dll's stderr");
 
-                string path = Envpath.get_stdout();
+                string path = EnvPath.get_stdout();
                 if (path is null) Error("Could not get dll's stdout");
 
-                WriteObject(new Output { Info = info, Path = path });
+                WriteObject(new TestOutput { Info = info, Path = path });
             }
 
-            ret = Envpath.reset_tmp_outputs();
-            if (!ret) Error("Could not reset output buffers");
+            Epilog();
+        }
+    }
+
+    [Cmdlet(VerbsData.Update, "EnvPath")]
+    [OutputType(typeof(void))]
+    public class UpdateEnvPath : Main
+    {
+        protected override void BeginProcessing()
+        {
+            if (!Prolog()) return;
+
+            bool ret = EnvPath.update();
+            if (!ret) Error("Call to `update` failed");
+
+            Epilog();
         }
     }
 
     [OutputType(typeof(string))]
-    public abstract class AddOrRemove : Mid
+    public abstract class AddOrRemove : Main
     {
-        [Parameter(Mandatory = true)]
-        [Alias("T")]
-        public Envpath.Target Target { get; set; }
-
         [Parameter(Mandatory = true, Position = 0)]
+        [Alias("T")]
+        public EnvPath.Target Target { get; set; }
+
+        [Parameter(Mandatory = true, Position = 1)]
         public string Path { get; set; }
 
         [Parameter()]
@@ -149,29 +179,25 @@ namespace envpath
         public SwitchParameter Exact { get; set; }
 
         public abstract bool dll_function(
-                Envpath.Target t, string s, bool v, bool e);
+                EnvPath.Target t, string s, bool v, bool e);
 
         protected override void BeginProcessing()
         {
-            bool verbose = this.MyInvocation.BoundParameters.ContainsKey(
-                    "Verbose");
-            bool ret = Envpath.set_tmp_outputs();
-            if (!ret) {
-                Error("Could not set output buffers");
-                return;
-            }
+            if (!Prolog()) return;
 
             bool exact = Exact.IsPresent;
-            ret = dll_function(Target, Path, verbose, exact);
+            bool verbose = this.MyInvocation.BoundParameters.ContainsKey(
+                    "Verbose");
+
+            bool ret = dll_function(Target, Path, verbose, exact);
             if (!ret) Error("Error");
 
-            string info = Envpath.get_stderr();
+            string info = EnvPath.get_stderr();
             if (info is null) Error("Could not get dll's stderr");
 
             WriteObject(info);
 
-            ret = Envpath.reset_tmp_outputs();
-            if (!ret) Error("Could not reset output buffers");
+            Epilog();
         }
     }
 
@@ -179,15 +205,15 @@ namespace envpath
     public class AddEnvPath : AddOrRemove
     {
         public override bool dll_function(
-                Envpath.Target t, string s, bool v, bool e
-        ) => Envpath.add_path(t, s, v, e);
+                EnvPath.Target t, string s, bool v, bool e
+        ) => EnvPath.add_path(t, s, v, e);
     }
 
     [Cmdlet(VerbsCommon.Remove, "EnvPath")]
     public class RemoveEnvPath : AddOrRemove
     {
         public override bool dll_function(
-                Envpath.Target t, string s, bool v, bool e
-        ) => Envpath.remove_path(t, s, v, e);
+                EnvPath.Target t, string s, bool v, bool e
+        ) => EnvPath.remove_path(t, s, v, e);
     }
 }
