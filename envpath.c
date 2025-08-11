@@ -491,10 +491,11 @@ static char *get_sanitized_envpath(bool diagnose, bool verbose)
     char *usr_path = get_registry_envpath(is_system);
     if (usr_path == NULL) return NULL;
     
-    char *inh_path;
-    size_t path_size;
-    errno_t err = _dupenv_s(&inh_path, &path_size, "PATH");
-    if (err) return NULL;
+    DWORD required = GetEnvironmentVariableA("Path", NULL, 0);
+    if (required == 0) return NULL;
+    char *inh_path = malloc(required);
+    if (inh_path == NULL) return NULL;
+    required = GetEnvironmentVariableA("Path", inh_path, required);
 
     DynArr sys_da = to_dynarr(sys_path, verbose, "System PATH from Registry");
     DynArr usr_da = to_dynarr(usr_path, verbose, "User PATH from Registry");
