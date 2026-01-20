@@ -168,7 +168,7 @@ namespace BinEnvPath
             string info = EnvPath.get_stderr();
             if (info is null) Error("Could not get dll's stderr");
 
-            WriteObject(info);
+            if (info.Length > 0) WriteObject(info);
 
             Epilog();
         }
