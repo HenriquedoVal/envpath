@@ -380,6 +380,7 @@ static DynArr sanitize(
     char *pathext = NULL;
     size_t size;
     _dupenv_s(&pathext, &size, "PATHEXT");
+    assert(pathext);
 
     DynArr ext = to_dynarr(pathext, false, NULL);
     char extra[2][5] = { ".dll", ".ps1" };
@@ -542,13 +543,13 @@ static bool da_unexpand(DynArr *da)
         char *dest = NULL;
         size_t size;
         _dupenv_s(&dest, &size, var_name[i]);
+        if (!dest) continue;
         char **s = dynarr_append(&vars, &dest);
         assert(s && *s == dest);
     }
 
     for (unsigned i = 0; i < vars.count; ++i) {
         char **var = dynarr_at(&vars, i);
-        if (!var || !*var) continue;
 
         for (unsigned j = 0; j < da->count; ++j) {
             char **s = dynarr_at(da, j);
@@ -556,13 +557,14 @@ static bool da_unexpand(DynArr *da)
             char *found = strstr(*s, *var);
             if (!found || found != *s) continue;
 
-            unexpanded = true;
+            char *mask = "%%%s%%%s";
             size_t size = strlen(*s) + 1;
             size_t len = strlen(*var);
-            int written = sprintf_s(*s, size,
-                                    "%%%s%%%s",
-                                    var_name[i], *s + len);
-            assert(written > 0 && (size_t)written < size);
+            if (_scprintf(mask, var_name[i], *s + len) < size) {
+                int w = sprintf_s(*s, size, mask, var_name[i], *s + len);
+                assert(w > 0 && (size_t)w < size);
+                unexpanded = true;
+            }
         }
     }
 
@@ -758,6 +760,7 @@ bool EXPORT add_path(
     char *pathext = NULL;
     size_t size;
     _dupenv_s(&pathext, &size, "PATHEXT");
+    assert(pathext);
 
     DynArr ext = to_dynarr(pathext, false, NULL);
     char extra[2][5] = { ".dll", ".ps1" };
