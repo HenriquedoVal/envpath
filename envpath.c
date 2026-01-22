@@ -532,9 +532,6 @@ static bool da_unexpand(DynArr *da)
         "LocalAppData",
         "AppData",
         "UserProfile",
-        "SystemRoot",
-        "ProgramFiles",
-        "Windir",
     };
 
     DynArr vars = dynarr_init_ex(sizeof(char *), _countof(var_name));
@@ -781,7 +778,8 @@ bool EXPORT add_path(
         assert(*s == *t);
     }
 
-    bool has_envvar = da_unexpand(&tar);
+    bool has_envvar = false;
+    if (t == USER) has_envvar = da_unexpand(&tar);
     char *envpath = da_to_envvar(&tar, false, NULL);
 
     ret = set_registry_envpath(t, envpath, has_envvar);
@@ -868,7 +866,8 @@ bool EXPORT remove_path(
     append_target_equal_idxs(&idxs, &sup, &tar);
     remove_idxs(&idxs, &tar);
 
-    bool has_envvar = da_unexpand(&tar);
+    bool has_envvar = false;
+    if (t == USER) has_envvar = da_unexpand(&tar);
     char *envpath = da_to_envvar(&tar, false, NULL);
 
     ret = set_registry_envpath(t, envpath, has_envvar);
